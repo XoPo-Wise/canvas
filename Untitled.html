@@ -4,13 +4,13 @@
 
 <style>
 canvas {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
-    display: block;
     width: 100%;
-    height: 100%;
+    height: 100vh;
     z-index: -1;
+    /* Не добавляем никаких свойств background */
 }
 </style>
 
@@ -89,7 +89,7 @@ document.addEventListener('DOMContentLoaded', function() {
     float get_stem_shape(vec2 _p, vec2 _uv, float _w, float _angle) {
 
         _w = max(.004, _w);
-
+         
         float x_offset = _p.y * sin(_angle);
         x_offset *= pow(3. * _uv.y, 2.);
         _p.x -= x_offset;
@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', function() {
         uv.x *= u_ratio;
         vec2 cursor = vUv - u_cursor.xy;
         cursor.x *= u_ratio;
-
+        
         // Измененные цвета для соответствия дизайну сайта
         vec3 stem_color = vec3(.1 + u_stop_randomizer[0] * .3, .5, .2);
         vec3 flower_color = vec3(.1, .6 + .3 * u_stop_randomizer[1], .1 + .2 * u_stop_randomizer[0]);
@@ -181,9 +181,13 @@ document.addEventListener('DOMContentLoaded', function() {
         initFlowers();
     };
     document.head.appendChild(script);
-
+    
     function initFlowers() {
         const canvasEl = document.querySelector("#canvas");
+        
+        // Явно устанавливаем размеры canvas
+        canvasEl.width = window.innerWidth;
+        canvasEl.height = window.innerHeight;
 
         const pointer = {
             x: .66,
@@ -201,17 +205,31 @@ document.addEventListener('DOMContentLoaded', function() {
         let basicMaterial, shaderMaterial;
         let renderer = new THREE.WebGLRenderer({
             canvas: canvasEl,
-            alpha: true,
+            alpha: true,  // Важно для прозрачного фона
+            antialias: true
         });
+        
+        // Устанавливаем прозрачный фон
+        renderer.setClearColor(0x000000, 0);  // Альфа-канал 0 делает фон полностью прозрачным
+        
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         let sceneShader = new THREE.Scene();
         let sceneBasic = new THREE.Scene();
+        
+        // Важно для прозрачности в новых версиях Three.js
+        sceneShader.background = null;
+        sceneBasic.background = null;
+        
         let camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 10);
         let clock = new THREE.Clock();
 
         let renderTargets = [
-            new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight),
-            new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight)
+            new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+                format: THREE.RGBAFormat  // Используем RGBA формат для поддержки прозрачности
+            }),
+            new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+                format: THREE.RGBAFormat
+            })
         ];
 
         createPlane();
@@ -230,7 +248,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!isTouchScreen) {
                 pointer.x = e.pageX / window.innerWidth;
                 pointer.y = e.pageY / window.innerHeight;
-                pointer.clicked = true;
+                pointer.clicked = true;		
             }
         });
         window.addEventListener("touchstart", e => {
@@ -258,9 +276,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     u_clean: {type: "f", value: 1.},
                 },
                 vertexShader: vertexShaderSource,
-                fragmentShader: fragmentShaderSource
+                fragmentShader: fragmentShaderSource,
+                transparent: true  // Важно для прозрачности материала
             });
-            basicMaterial = new THREE.MeshBasicMaterial();
+            
+            basicMaterial = new THREE.MeshBasicMaterial({
+                transparent: true  // Важно для прозрачности материала
+            });
+            
             const planeGeometry = new THREE.PlaneGeometry(2, 2);
             const planeBasic = new THREE.Mesh(planeGeometry, basicMaterial);
             const planeShader = new THREE.Mesh(planeGeometry, shaderMaterial);
@@ -294,6 +317,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         function updateSize() {
+            // Обновляем размеры canvas элемента
+            canvasEl.width = window.innerWidth;
+            canvasEl.height = window.innerHeight;
+            
             shaderMaterial.uniforms.u_ratio.value = window.innerWidth / window.innerHeight;
             renderer.setSize(window.innerWidth, window.innerHeight);
         }

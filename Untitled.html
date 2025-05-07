@@ -8,9 +8,9 @@ canvas {
     top: 0;
     left: 0;
     width: 100%;
-    height: 50vh;
+    height: 100%;
     z-index: -1;
-    /* Не добавляем никаких свойств background */
+    pointer-events: none;
 }
 </style>
 
@@ -118,8 +118,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     void main() {
-
-        vec3 base = texture2D(u_texture, vUv).xyz;
+        // Начинаем с полностью прозрачного цвета
+        vec4 base = vec4(0.0, 0.0, 0.0, 0.0);
+        
+        // Если у нас есть текстура, берем цвет из нее, но сохраняем прозрачность для фона
+        if (texture2D(u_texture, vUv).a > 0.0) {
+            base = vec4(texture2D(u_texture, vUv).rgb, texture2D(u_texture, vUv).a);
+        }
 
         vec2 uv = vUv;
         uv.x *= u_ratio;
@@ -146,23 +151,30 @@ document.addEventListener('DOMContentLoaded', function() {
         float flower_front_shape = get_flower_shape(cursor, petals_front_number, angle, 1.);
         float flower_front_mask = 1. - get_flower_shape(cursor, petals_front_number, angle, .95);
 
-        vec3 color = base;
+        vec3 color = base.rgb;
         color *= stem_mask;
         color *= flower_back_mask;
         color *= flower_front_mask;
 
-        color += (stem_shape * stem_color);
+        // Добавляем цвета только там, где есть формы
+        vec3 addedColor = vec3(0.0);
+        addedColor += (stem_shape * stem_color);
+        addedColor += (flower_back_shape * (flower_color + vec3(0., .3 * u_stop_time, 0.)));
+        addedColor += (flower_front_shape * flower_color);
 
-        color += (flower_back_shape * (flower_color + vec3(0., .3 * u_stop_time, 0.)));
-        color += (flower_front_shape * flower_color);
+        // Вычисляем альфа-канал на основе форм
+        float alpha = max(max(stem_shape, flower_back_shape), flower_front_shape);
+        
+        // Применяем цвета только там, где есть формы
+        color = mix(color, addedColor, alpha);
 
         color.r *= 1. - (.5 * flower_back_shape * flower_front_shape);
         color.b *= 1. - (flower_back_shape * flower_front_shape);
 
-
         color *= u_clean;
 
-        gl_FragColor = vec4(color, 1.);
+        // Устанавливаем прозрачность только там, где есть формы
+        gl_FragColor = vec4(color, alpha * u_clean);
     }
     `;
 
@@ -206,7 +218,8 @@ document.addEventListener('DOMContentLoaded', function() {
         let renderer = new THREE.WebGLRenderer({
             canvas: canvasEl,
             alpha: true,  // Важно для прозрачного фона
-            antialias: true
+            antialias: true,
+            premultipliedAlpha: false
         });
         
         // Устанавливаем прозрачный фон
@@ -225,10 +238,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
         let renderTargets = [
             new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-                format: THREE.RGBAFormat  // Используем RGBA формат для поддержки прозрачности
+                format: THREE.RGBAFormat,  // Используем RGBA формат для поддержки прозрачности
+                transparent: true
             }),
             new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-                format: THREE.RGBAFormat
+                format: THREE.RGBAFormat,
+                transparent: true
             })
         ];
 
@@ -277,11 +292,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 vertexShader: vertexShaderSource,
                 fragmentShader: fragmentShaderSource,
-                transparent: true  // Важно для прозрачности материала
+                transparent: true,  // Важно для прозрачности материала
+                blending: THREE.NormalBlending
             });
             
             basicMaterial = new THREE.MeshBasicMaterial({
-                transparent: true  // Важно для прозрачности материала
+                transparent: true,  // Важно для прозрачности материала
+                opacity: 0
             });
             
             const planeGeometry = new THREE.PlaneGeometry(2, 2);
